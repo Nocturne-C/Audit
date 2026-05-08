@@ -1,0 +1,190 @@
+{
+  "round": 2,
+  "summary": {
+    "total_findings": 6,
+    "new_findings": 1,
+    "updated_existing_findings": 1,
+    "rejected_candidates": 5,
+    "action_counts": {
+      "existing_preserved": 4,
+      "existing_rewritten": 1,
+      "rewritten_agent_signal": 1
+    },
+    "rejection_reason_counts": {
+      "low_impact_or_operational": 2,
+      "other": 2,
+      "trust_or_owner_model": 1
+    }
+  },
+  "findings": [
+    {
+      "id": "F-001",
+      "action": "existing_preserved",
+      "severity": "Critical",
+      "confidence": "high",
+      "title": "`proxyDeposit` can be farmed with zero amount to drain reward treasury",
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ],
+      "best_agent_match": {
+        "agent": "opencode_1",
+        "title": "setPool does not emit events for pool or REWARD state changes",
+        "score": 0.397
+      },
+      "locations": [
+        "AaveBoost.sol:48",
+        "AaveBoost.sol:49",
+        "AaveBoost.sol:50"
+      ]
+    },
+    {
+      "id": "F-002",
+      "action": "existing_preserved",
+      "severity": "High",
+      "confidence": "high",
+      "title": "Historical pools retain unlimited AAVE allowance after `setPool`",
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ],
+      "best_agent_match": {
+        "agent": "codex_1",
+        "title": "Fallback branch allows free theft of remaining AAVE once balance drops below REWARD",
+        "score": 0.367
+      },
+      "locations": [
+        "AaveBoost.sol:27",
+        "AaveBoost.sol:28",
+        "AaveBoost.sol:34",
+        "AaveBoost.sol:37"
+      ]
+    },
+    {
+      "id": "F-003",
+      "action": "existing_rewritten",
+      "severity": "High",
+      "confidence": "medium",
+      "title": "`proxyDeposit` does not source the deposited `asset` from user, causing broken deposits and DoS paths",
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ],
+      "best_agent_match": {
+        "agent": "opencode_1",
+        "title": "proxyDeposit allows address(0) recipient \u2014 tokens may be burned depending on pool implementation",
+        "score": 0.406
+      },
+      "locations": [
+        "AaveBoost.sol:44",
+        "AaveBoost.sol:49",
+        "AaveBoost.sol:50",
+        "AaveBoost.sol:53"
+      ]
+    },
+    {
+      "id": "F-004",
+      "action": "existing_preserved",
+      "severity": "Medium",
+      "confidence": "high",
+      "title": "`setPool` cannot update reward on same pool due max-allowance overflow in `safeIncreaseAllowance`",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "best_agent_match": {
+        "agent": "opencode_1",
+        "title": "setPool does not emit events for pool or REWARD state changes",
+        "score": 0.367
+      },
+      "locations": [
+        "AaveBoost.sol:34",
+        "AaveBoost.sol:37",
+        "AaveBoost.sol:39"
+      ]
+    },
+    {
+      "id": "F-005",
+      "action": "existing_preserved",
+      "severity": "Low",
+      "confidence": "medium",
+      "title": "`setPool` lacks zero/non-contract validation and can brick deposits if misconfigured",
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ],
+      "best_agent_match": {
+        "agent": "opencode_1",
+        "title": "uint128 overflow in amount + REWARD expression causes theoretical DoS for reward-path deposits",
+        "score": 0.348
+      },
+      "locations": [
+        "AaveBoost.sol:34",
+        "AaveBoost.sol:35",
+        "AaveBoost.sol:50",
+        "AaveBoost.sol:53"
+      ]
+    },
+    {
+      "id": "F-006",
+      "action": "rewritten_agent_signal",
+      "severity": "High",
+      "confidence": "medium",
+      "title": "Fallback branch can drain remaining AAVE from the contract when rewards are below threshold",
+      "source_agents": [
+        "codex_1"
+      ],
+      "best_agent_match": {
+        "agent": "codex_1",
+        "title": "Fallback branch allows free theft of remaining AAVE once balance drops below REWARD",
+        "score": 0.552
+      },
+      "locations": [
+        "AaveBoost.sol:28",
+        "AaveBoost.sol:37",
+        "AaveBoost.sol:53"
+      ]
+    }
+  ],
+  "rejected_candidates": [
+    {
+      "title": "proxyDeposit reward path transfers aave but deposits arbitrary asset \u2014 type confusion causes permanent fund lock when asset != aave",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason_category": "other",
+      "reason": "If `pool.deposit` reverts, the whole transaction reverts and the prior `safeTransferFrom` is rolled back; user AAVE is not permanently locked by this path."
+    },
+    {
+      "title": "No token sweep function \u2014 ERC20 tokens sent directly to the contract are permanently locked",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason_category": "low_impact_or_operational",
+      "reason": "Primarily an operational/design limitation for unsolicited token transfers, not a concrete exploitable protocol vulnerability from this code."
+    },
+    {
+      "title": "setPool does not emit events for pool or REWARD state changes",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason_category": "low_impact_or_operational",
+      "reason": "Informational observability issue without direct security impact."
+    },
+    {
+      "title": "proxyDeposit allows address(0) recipient \u2014 tokens may be burned depending on pool implementation",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason_category": "other",
+      "reason": "Heavily dependent on unknown downstream pool behavior and mostly user-self-inflicted; no concrete protocol-level exploit demonstrated from this contract alone."
+    },
+    {
+      "title": "uint128 overflow in amount + REWARD expression causes theoretical DoS for reward-path deposits",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason_category": "trust_or_owner_model",
+      "reason": "Requires extreme privileged misconfiguration near `type(uint128).max`; treated as unrealistic/theoretical rather than a reportable protocol-risk condition."
+    }
+  ]
+}

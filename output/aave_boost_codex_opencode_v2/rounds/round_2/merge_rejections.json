@@ -1,0 +1,37 @@
+[
+  {
+    "title": "proxyDeposit reward path transfers aave but deposits arbitrary asset \u2014 type confusion causes permanent fund lock when asset != aave",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "If `pool.deposit` reverts, the whole transaction reverts and the prior `safeTransferFrom` is rolled back; user AAVE is not permanently locked by this path."
+  },
+  {
+    "title": "No token sweep function \u2014 ERC20 tokens sent directly to the contract are permanently locked",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Primarily an operational/design limitation for unsolicited token transfers, not a concrete exploitable protocol vulnerability from this code."
+  },
+  {
+    "title": "setPool does not emit events for pool or REWARD state changes",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Informational observability issue without direct security impact."
+  },
+  {
+    "title": "proxyDeposit allows address(0) recipient \u2014 tokens may be burned depending on pool implementation",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Heavily dependent on unknown downstream pool behavior and mostly user-self-inflicted; no concrete protocol-level exploit demonstrated from this contract alone."
+  },
+  {
+    "title": "uint128 overflow in amount + REWARD expression causes theoretical DoS for reward-path deposits",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Requires extreme privileged misconfiguration near `type(uint128).max`; treated as unrealistic/theoretical rather than a reportable protocol-risk condition."
+  }
+]

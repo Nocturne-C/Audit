@@ -1,0 +1,66 @@
+[
+  {
+    "title": "No withdrawal function \u2014 tokens permanently locked in the contract",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Not reliably true as a security issue in this design scope; locked-recovery behavior may be intentional, and owner can already redirect AAVE via pool-allowance control. More of design/governance policy than exploitable vulnerability."
+  },
+  {
+    "title": "Owner can set malicious pool to drain all AAVE via infinite allowance",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Privileged-owner trust assumption, not a permissionless exploit. This is expected capability of `onlyOwner` and overlaps with governance risk rather than a standalone vulnerability."
+  },
+  {
+    "title": "Unrestricted asset parameter allows draining any token held by the contract",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Contract only approves AAVE to pool; draining arbitrary tokens via `pool.deposit(asset,...)` is not generally feasible without corresponding allowance/funding and is unsupported by current code."
+  },
+  {
+    "title": "Potential re-entrancy through pool.deposit call after AAVE transfer",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "No exploitable mutable state dependency was identified; claimed amplification is unnecessary because repeated direct calls already achieve reward draining."
+  },
+  {
+    "title": "Missing events for all state-changing functions",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Observability issue only; no direct protocol-level fund-loss/theft/insolvency/DoS impact."
+  },
+  {
+    "title": "No zero-address validation for recipient and asset in proxyDeposit",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Primarily caller-self-harm/input-sanity concern; no clear permissionless protocol exploit established from current code alone."
+  },
+  {
+    "title": "REWARD uses uint128 but allowance and deposits operate on uint256",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "Type-width difference is intentional/benign under checked arithmetic and does not create a concrete exploit path."
+  },
+  {
+    "title": "Pool address can be set to non-contract/zero, enabling user-fund capture without real deposit",
+    "source_agents": [
+      "codex_1",
+      "opencode_1"
+    ],
+    "reason": "The specific fund-capture claim is overstated for Solidity 0.8.4 high-level external calls (invalid target reverts). Retained a downgraded misconfiguration-DoS variant instead."
+  },
+  {
+    "title": "setPool does not validate that newReward_ is non-zero",
+    "source_agents": [
+      "opencode_1"
+    ],
+    "reason": "`REWARD=0` is a parameter choice, not inherently exploitable; economic undesirability alone is governance/configuration policy, not a standalone vulnerability."
+  }
+]

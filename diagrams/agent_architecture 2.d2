@@ -1,0 +1,79 @@
+direction: right
+
+classes: {
+  layer_box: {
+    style: {
+      fill: transparent; stroke: "#e0e0e0"; stroke-dash: 5;
+      font-size: 14; font-color: "#757575"; bold: true; border-radius: 8
+    }
+  }
+  static_data: { style: { fill: "#f5f5f5"; stroke: "#9e9e9e"; border-radius: 4; font-size: 13; shadow: true } }
+  dynamic_state: { style: { fill: "#fdf3fc"; stroke: "#ba68c8"; border-radius: 4; stroke-width: 2; font-size: 13; shadow: true } }
+  database: { shape: cylinder; style: { fill: "#fff3e0"; stroke: "#ffb74d"; font-size: 13; shadow: true } }
+  
+  agent_node: { style: { fill: "#e3f2fd"; stroke: "#42a5f5"; shadow: true; border-radius: 6; font-size: 14; bold: true } }
+  merge_node: { style: { fill: "#e8f5e9"; stroke: "#66bb6a"; shadow: true; border-radius: 6; font-size: 14; bold: true } }
+  memory_node: { style: { fill: "#f3e5f5"; stroke: "#ab47bc"; shadow: true; border-radius: 6; font-size: 14; bold: true } }
+}
+
+L1_Input: "Layer 1. Scope Constraints (Static)" {
+  class: layer_box
+  
+  raw_code: "Target Smart Contracts" { class: static_data }
+  code_map: "Curated Code Map\n(Targeted Views)" { class: static_data }
+  excludes: "Pre-defined Exclude Globs" { class: static_data }
+  
+  raw_code -> code_map: "Extract" { style: { stroke-width: 2; stroke: "#9e9e9e" } }
+}
+
+L2_Convergence_Loop: "Layer 2. Convergence Loop Driven by Thin Harness" {
+  class: layer_box
+  style.stroke: "#ef5350"
+  style.stroke-width: 2
+
+  exploration: "Exploration Engine\n[Multi-Agent Swarm]" {
+    class: agent_node
+    codex: "Codex Agent (Deep Logic)" { style: { fill: white; border-radius: 2 } }
+    opencode: "OpenCode Agent (Breadth)" { style: { fill: white; border-radius: 2 } }
+  }
+
+  synthesis: "Synthesis & Constraint Engine\n[Merge.py]" { class: merge_node }
+  compression: "Context Compression Engine\n[Summarize.py]" { class: memory_node }
+
+  exploration -> synthesis: "Raw Findings &\nVulnerability Traces" { style: { stroke-width: 2 } }
+  synthesis -> compression: "Verified Signal Flow" { style: { stroke-width: 2 } }
+}
+
+L3_Storage: "Layer 3. End-State Database" {
+  class: layer_box
+  
+  finding_db: "Accumulated Findings\nJSON Schema" { class: database }
+  reject_db: "Rejected Candidates\nJSON Log" { class: database }
+}
+
+L4_Memory: "Layer 4. Dynamic Control State" {
+  class: layer_box
+  
+  round_memory: "Round Summary\n(Short-term Focus)" { class: dynamic_state }
+  global_memory: "Global Audit Memory\n(Long-term Topology)" { class: dynamic_state }
+}
+
+L1_Input.code_map -> L2_Convergence_Loop.exploration: "Inject Context" { style: { stroke-width: 2; font-size: 11; font-color: "#757575" } }
+L1_Input.excludes -> L2_Convergence_Loop.synthesis: "Constraint Rule" { style: { stroke-dash: 5; font-size: 11; font-color: "#757575" } }
+
+L2_Convergence_Loop.synthesis -> L3_Storage.finding_db: "Save Verified" { style: { stroke-width: 2; stroke: "#66bb6a"; font-size: 11; font-color: "#66bb6a" } }
+L2_Convergence_Loop.synthesis -> L3_Storage.reject_db: "Save Dropped" { style: { stroke-width: 1; font-size: 11; font-color: "#757575" } }
+
+L2_Convergence_Loop.compression -> L4_Memory.round_memory: "Extract Recent" { style: { stroke-width: 2; font-size: 11; font-color: "#757575" } }
+L2_Convergence_Loop.compression -> L4_Memory.global_memory: "Update Map" { style: { stroke-width: 2; font-size: 11; font-color: "#757575" } }
+
+L3_Storage.finding_db -> L2_Convergence_Loop.synthesis: "Deduplication Baseline" { 
+  style: { stroke-dash: 5; font-size: 11; font-color: "#ffb74d"; stroke: "#ffb74d"; stroke-width: 2 }
+}
+
+L4_Memory.round_memory -> L2_Convergence_Loop.exploration: "Next Step Anchor" { 
+  style: { stroke-dash: 5; stroke-width: 2; stroke: "#ba68c8"; font-size: 12; font-color: "#ba68c8" }
+}
+L4_Memory.global_memory -> L2_Convergence_Loop.exploration: "Known Exents" { 
+  style: { stroke-dash: 5; stroke-width: 2; stroke: "#ba68c8"; font-size: 12; font-color: "#ba68c8" }
+}

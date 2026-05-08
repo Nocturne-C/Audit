@@ -1,0 +1,88 @@
+[
+  {
+    "id": "F-001",
+    "severity": "Critical",
+    "confidence": "high",
+    "title": "Unbounded reward farming allows near-zero-cost drain of reward treasury",
+    "locations": [
+      "AaveBoost.sol:43",
+      "AaveBoost.sol:48",
+      "AaveBoost.sol:50"
+    ],
+    "claim": "`proxyDeposit` grants a fixed `REWARD` on every call when balance is sufficient, with no per-user accounting, cooldown, or minimum economic threshold; an attacker can repeatedly call it with tiny (or zero, if accepted downstream) amounts to extract the subsidy.",
+    "impact": "The contract’s AAVE reward reserve can be drained rapidly by bots, diverting incentive funds to attackers and breaking intended distribution.",
+    "paths": [
+      "Attacker calls `proxyDeposit(aave, attacker, 0)` (or dust amount) repeatedly while `aave.balanceOf(this) >= REWARD`.",
+      "Each successful call routes `amount + REWARD` into attacker-designated recipient position, consuming treasury reward each iteration."
+    ]
+  },
+  {
+    "id": "F-002",
+    "severity": "High",
+    "confidence": "high",
+    "title": "Old pool contracts retain infinite approval and can drain all AAVE later",
+    "locations": [
+      "AaveBoost.sol:27",
+      "AaveBoost.sol:34",
+      "AaveBoost.sol:37"
+    ],
+    "claim": "The contract increases allowance to `type(uint256).max` for each configured pool but never revokes prior pool allowances, so every historical pool keeps perpetual transfer rights.",
+    "impact": "If any previous pool is compromised, malicious, or upgradeable to malicious logic, it can transfer all current and future AAVE held by this contract.",
+    "paths": [
+      "Owner calls `setPool(newPool, ...)` one or more times.",
+      "Any previously approved pool calls `aave.transferFrom(AaveBoost, attacker, amount)` to drain reserves."
+    ]
+  },
+  {
+    "id": "F-003",
+    "severity": "High",
+    "confidence": "medium",
+    "title": "Pool address can be set to non-contract/zero, enabling user-fund capture without real deposit",
+    "locations": [
+      "AaveBoost.sol:34",
+      "AaveBoost.sol:35",
+      "AaveBoost.sol:49",
+      "AaveBoost.sol:50"
+    ],
+    "claim": "`setPool` lacks nonzero/contract-code validation; if `pool` is set to an EOA or zero address, the contract still pulls user AAVE first, and the subsequent `deposit` external call may not perform a real deposit.",
+    "impact": "Users can lose transferred funds (locked in this contract) while receiving no pool position, creating a direct loss/rug surface.",
+    "paths": [
+      "Owner sets `pool` to `address(0)` or EOA via `setPool`.",
+      "User calls `proxyDeposit` in reward branch; `aave.safeTransferFrom` succeeds, but effective pool deposit does not occur."
+    ]
+  },
+  {
+    "id": "F-004",
+    "severity": "Medium",
+    "confidence": "medium",
+    "title": "Fallback branch does not collect user tokens, causing denial of service after rewards deplete",
+    "locations": [
+      "AaveBoost.sol:51",
+      "AaveBoost.sol:53"
+    ],
+    "claim": "When reward balance is below `REWARD`, the function directly calls `pool.deposit(asset, recipient, amount, false)` without first transferring `asset` from the caller to this contract.",
+    "impact": "After reward depletion, normal proxy deposits can fail systematically (or consume only contract-held balances), breaking protocol availability and expected user flow.",
+    "paths": [
+      "Reward reserve falls below `REWARD`.",
+      "Users call `proxyDeposit`; downstream pool pull from this contract lacks corresponding funded balance/allowance and reverts."
+    ]
+  },
+  {
+    "id": "F-005",
+    "severity": "Medium",
+    "confidence": "low",
+    "title": "Asset/payment mismatch: caller is charged in AAVE while pool asset is fully user-controlled",
+    "locations": [
+      "AaveBoost.sol:44",
+      "AaveBoost.sol:49",
+      "AaveBoost.sol:50",
+      "AaveBoost.sol:53"
+    ],
+    "claim": "The contract always executes `aave.safeTransferFrom(msg.sender, this, amount)` but forwards arbitrary `asset` to pool deposit, creating a unit-of-account mismatch.",
+    "impact": "This can lead to undercollateralized or failed deposits, mis-accounting, and potential extraction of any accidentally held asset balances depending on downstream pool behavior.",
+    "paths": [
+      "Attacker calls `proxyDeposit(asset != aave, recipient, amount)`.",
+      "Contract charges AAVE but attempts pool deposit in different asset denomination."
+    ]
+  }
+]

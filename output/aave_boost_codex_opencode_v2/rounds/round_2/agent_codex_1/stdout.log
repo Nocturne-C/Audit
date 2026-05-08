@@ -1,0 +1,21 @@
+[
+  {
+    "id": "F-006",
+    "severity": "High",
+    "confidence": "high",
+    "title": "Fallback branch allows free theft of remaining AAVE once balance drops below REWARD",
+    "locations": [
+      "AaveBoost.sol:48",
+      "AaveBoost.sol:53",
+      "AaveBoost.sol:28"
+    ],
+    "claim": "When `aave.balanceOf(address(this)) < REWARD`, `proxyDeposit` skips any token pull from the caller and still calls `pool.deposit(asset, recipient, amount, false)`. Because the contract has already granted the pool an unlimited AAVE allowance, an attacker can set `asset = aave` and make the pool pull AAVE from `AaveBoost` into the attacker's recipient position without paying anything.",
+    "impact": "All residual AAVE in the booster can be permissionlessly drained for free after the treasury dips below the reward threshold, causing direct protocol fund loss.",
+    "paths": [
+      "Precondition: `0 < aave.balanceOf(AaveBoost) < REWARD` (e.g., after prior reward farming).",
+      "Attacker calls `proxyDeposit(aave, attackerRecipient, remainingBalance)`.",
+      "Execution enters fallback branch and performs no `transferFrom` from attacker.",
+      "Pool pulls `remainingBalance` AAVE from `AaveBoost` (via prior infinite allowance) and credits attacker recipient."
+    ]
+  }
+]

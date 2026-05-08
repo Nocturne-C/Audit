@@ -1,0 +1,717 @@
+OpenAI Codex v0.124.0-alpha.2 (research preview)
+--------
+workdir: /Users/lu/Desktop/Red_V1G/replicate_experiment/workspaces/aave_boost/etherscan-contracts/0xd2933c86216dC0c938FfAFEca3C8a2D6e633e2cA/contracts
+model: gpt-5.3-codex
+provider: openai
+approval: never
+sandbox: workspace-write [workdir, /tmp, $TMPDIR, /Users/lu/.codex/memories]
+reasoning effort: high
+reasoning summaries: none
+session id: 019dd47b-8ac9-7740-8a5c-2e111847072b
+--------
+user
+Below are findings and vulnerability signals from 2 agents auditing the same codebase,
+plus accumulated findings from previous rounds. You need to inspect the source code when needed.
+
+You are the merge and review layer for a audit.
+
+Your task:
+- merge new or materially improved reportable issues into the accumulated findings
+- reconstruct plausible but poorly written findings or signals into low-confidence findings when the code supports them
+- reject clearly non-reportable candidates with your reasons
+- try to use this round's signals and the source code to look for additional findings yourself
+
+Prefer downgrading severity or confidence over discarding a plausible issue.
+Keep findings that can cause realistic protocol-level harm, including fund loss,
+theft, insolvency, permanent lockup, economic manipulation, or permissionless DoS and some other realistic issues.
+
+## Accumulated Findings
+[
+  {
+    "id": "F-001",
+    "severity": "Critical",
+    "confidence": "high",
+    "title": "`proxyDeposit` can be farmed with zero amount to drain reward treasury",
+    "locations": [
+      "AaveBoost.sol:48",
+      "AaveBoost.sol:49",
+      "AaveBoost.sol:50"
+    ],
+    "claim": "The reward branch is gated only by `aave.balanceOf(address(this)) >= REWARD` and does not enforce `amount > 0` or any per-user rate/accounting. Calling `proxyDeposit` with `amount = 0` still reaches `pool.deposit(..., amount + REWARD, ...)`, allowing repeated extraction of `REWARD` from contract-held AAVE.",
+    "impact": "Any account can repeatedly consume the subsidy and redirect deposits to itself, draining the contract's reward inventory and breaking incentive distribution.",
+    "paths": [
+      "Attacker calls `proxyDeposit(aave, attacker, 0)` while contract AAVE balance is at least `REWARD`.",
+      "`aave.safeTransferFrom(msg.sender, address(this), 0)` succeeds with no economic cost.",
+      "`pool.deposit(aave, attacker, REWARD, false)` spends reward inventory.",
+      "Repeat until AAVE balance falls below `REWARD`."
+    ],
+    "round": 1,
+    "source_agents": [
+      "codex_1",
+      "opencode_1"
+    ]
+  },
+  {
+    "id": "F-002",
+    "severity": "High",
+    "confidence": "high",
+    "title": "Historical pools retain unlimited AAVE allowance after `setPool`",
+    "locations": [
+      "AaveBoost.sol:27",
+      "AaveBoost.sol:28",
+      "AaveBoost.sol:34",
+      "AaveBoost.sol:37"
+    ],
+    "claim": "The contract grants `type(uint256).max` allowance to each configured pool via `safeIncreaseAllowance` but never revokes allowance from prior pools when rotating `pool`. Every previously configured pool keeps perpetual transfer rights over this contract’s AAVE.",
+    "impact": "If any previous pool address is compromised/malicious, it can drain all current and future AAVE held by this contract through `transferFrom`.",
+    "paths": [
+      "Deploy with pool P1, giving P1 max allowance on AAVE.",
+      "Owner calls `setPool(P2, ...)`; P2 also receives max allowance.",
+      "P1 allowance remains nonzero forever.",
+      "Compromised P1 transfers AAVE out of AaveBoost via `transferFrom`."
+    ],
+    "round": 1,
+    "source_agents": [
+      "codex_1",
+      "opencode_1"
+    ]
+  },
+  {
+    "id": "F-003",
+    "severity": "High",
+    "confidence": "medium",
+    "title": "`proxyDeposit` does not source the deposited `asset` from user, causing broken deposits and DoS paths",
+    "locations": [
+      "AaveBoost.sol:44",
+      "AaveBoost.sol:49",
+      "AaveBoost.sol:50",
+      "AaveBoost.sol:53"
+    ],
+    "claim": "`proxyDeposit` only pulls `aave` from the caller in the reward branch and pulls nothing in the fallback branch; it never transfers `asset` from the caller. For pool implementations where `deposit` pulls `asset` from `msg.sender` (the AaveBoost contract), calls fail unless AaveBoost already holds and has approved that `asset`.",
+    "impact": "Proxy deposits can fail systematically (especially fallback path after rewards deplete), creating permissionless availability failure for intended user deposits.",
+    "paths": [
+      "User calls `proxyDeposit(asset, recipient, amount)` with `asset != aave`; contract still pulls AAVE (or nothing in fallback) instead of `asset`.",
+      "`pool.deposit(asset, ...)` attempts to source `asset` from AaveBoost, which is typically unfunded/unapproved for that token.",
+      "Call reverts; users cannot complete deposits via this proxy path.",
+      "After contract AAVE drops below `REWARD`, fallback branch (`pool.deposit` only) is broadly non-functional under the same funding assumption."
+    ],
+    "round": 1,
+    "source_agents": [
+      "codex_1",
+      "opencode_1"
+    ]
+  },
+  {
+    "id": "F-004",
+    "severity": "Medium",
+    "confidence": "high",
+    "title": "`setPool` cannot update reward on same pool due max-allowance overflow in `safeIncreaseAllowance`",
+    "locations": [
+      "AaveBoost.sol:34",
+      "AaveBoost.sol:37",
+      "AaveBoost.sol:39"
+    ],
+    "claim": "`setPool` always calls `aave.safeIncreaseAllowance(address(pool), maxUint)`. If current allowance is already max (constructor/previous call), adding max overflows and reverts under Solidity 0.8 checked arithmetic.",
+    "impact": "Owner cannot adjust `REWARD` while keeping the same pool address, reducing ability to operate/tune incentives and potentially blocking maintenance actions.",
+    "paths": [
+      "Pool already has max allowance from constructor or prior `setPool`.",
+      "Owner calls `setPool(existingPool, newReward)`.",
+      "Allowance increment `oldAllowance + maxUint` overflows and transaction reverts."
+    ],
+    "round": 1,
+    "source_agents": [
+      "opencode_1"
+    ]
+  },
+  {
+    "id": "F-005",
+    "severity": "Low",
+    "confidence": "medium",
+    "title": "`setPool` lacks zero/non-contract validation and can brick deposits if misconfigured",
+    "locations": [
+      "AaveBoost.sol:34",
+      "AaveBoost.sol:35",
+      "AaveBoost.sol:50",
+      "AaveBoost.sol:53"
+    ],
+    "claim": "Unlike constructor checks, `setPool` does not validate `pool_ != address(0)` or contract code presence. Misconfiguration to an invalid target can make subsequent `proxyDeposit` calls revert when invoking `pool.deposit`.",
+    "impact": "A mistaken governance/operator action can halt all proxy deposits until corrected, causing service outage.",
+    "paths": [
+      "Owner sets `pool` to zero/non-contract via `setPool`.",
+      "Users call `proxyDeposit`.",
+      "External call to `pool.deposit` fails, reverting deposits globally."
+    ],
+    "round": 1,
+    "source_agents": [
+      "codex_1",
+      "opencode_1"
+    ]
+  }
+]
+
+## This Round's Agent Outputs
+### Agent: codex_1
+```
+[
+  {
+    "id": "F-006",
+    "severity": "High",
+    "confidence": "high",
+    "title": "Fallback branch allows free theft of remaining AAVE once balance drops below REWARD",
+    "locations": [
+      "AaveBoost.sol:48",
+      "AaveBoost.sol:53",
+      "AaveBoost.sol:28"
+    ],
+    "claim": "When `aave.balanceOf(address(this)) < REWARD`, `proxyDeposit` skips any token pull from the caller and still calls `pool.deposit(asset, recipient, amount, false)`. Because the contract has already granted the pool an unlimited AAVE allowance, an attacker can set `asset = aave` and make the pool pull AAVE from `AaveBoost` into the attacker's recipient position without paying anything.",
+    "impact": "All residual AAVE in the booster can be permissionlessly drained for free after the treasury dips below the reward threshold, causing direct protocol fund loss.",
+    "paths": [
+      "Precondition: `0 < aave.balanceOf(AaveBoost) < REWARD` (e.g., after prior reward farming).",
+      "Attacker calls `proxyDeposit(aave, attackerRecipient, remainingBalance)`.",
+      "Execution enters fallback branch and performs no `transferFrom` from attacker.",
+      "Pool pulls `remainingBalance` AAVE from `AaveBoost` (via prior infinite allowance) and credits attacker recipient."
+    ]
+  }
+]
+
+```
+
+### Agent: opencode_1
+```
+After thorough analysis, here are the distinct findings beyond the known F-001 through F-005:
+
+```json
+[
+  {
+    "id": "F-006",
+    "severity": "Medium",
+    "confidence": "medium",
+    "title": "proxyDeposit reward path transfers aave but deposits arbitrary asset — type confusion causes permanent fund lock when asset != aave",
+    "locations": ["AaveBoost.sol:49-50"],
+    "claim": "In the reward branch of proxyDeposit, line 49 transfers amount of the immutable aave token from msg.sender, but line 50 calls pool.deposit with the user-supplied asset parameter. No validation enforces asset == aave. When asset != aave, the user's aave is transferred into AaveBoost but the pool deposit reverts because AaveBoost holds no asset tokens. The contract has no withdrawal function, so the user's aave is permanently locked.",
+    "impact": "Users who call proxyDeposit with an asset that differs from aave will permanently lose the transferred aave tokens with no recovery path. This can happen through front-end bugs, user error, or composability misunderstandings.",
+    "paths": [
+      "User holds aave and has approved AaveBoost for aave spending",
+      "User calls proxyDeposit(USDC, bob, 1000e18) intending a boost but passing wrong asset",
+      "Reward condition aave.balanceOf(address(this)) >= REWARD evaluates true",
+      "Line 49: 1000e18 aave transferred from user to AaveBoost",
+      "Line 50: pool.deposit(USDC, bob, 1000e18 + REWARD, false) called",
+      "Pool attempts safeTransferFrom(USDC, AaveBoost, pool, ...) — reverts (AaveBoost has no USDC)",
+      "User's 1000e18 aave remains permanently trapped in AaveBoost"
+    ]
+  },
+  {
+    "id": "F-007",
+    "severity": "Low",
+    "confidence": "high",
+    "title": "No token sweep function — ERC20 tokens sent directly to the contract are permanently locked",
+    "locations": ["AaveBoost.sol:9-56"],
+    "claim": "The contract only interacts with the aave ERC20 token. There is no sweep, rescue, or withdrawal function for other ERC20 tokens or native ETH sent to the contract address. Any non-aave tokens transferred directly to AaveBoost are irrecoverable.",
+    "impact": "Non-aave ERC20 tokens accidentally or maliciously sent to the contract are permanently locked with no recovery mechanism, resulting in irreversible fund loss.",
+    "paths": [
+      "User or third party transfers USDC/WETH/etc. directly to the AaveBoost contract address",
+      "No function exists to withdraw or sweep these tokens",
+      "Funds are permanently locked in the contract"
+    ]
+  },
+  {
+    "id": "F-008",
+    "severity": "Informational",
+    "confidence": "high",
+    "title": "setPool does not emit events for pool or REWARD state changes",
+    "locations": ["AaveBoost.sol:34-41"],
+    "claim": "The setPool function mutates the pool address and REWARD amount without emitting any events. Off-chain indexers, monitoring systems, and users cannot reliably detect configuration changes on-chain.",
+    "impact": "Reduced transparency and auditability. Users may operate under stale assumptions about the active pool or reward amount. Automated monitoring systems cannot track configuration drift.",
+    "paths": []
+  },
+  {
+    "id": "F-009",
+    "severity": "Low",
+    "confidence": "low",
+    "title": "proxyDeposit allows address(0) recipient — tokens may be burned depending on pool implementation",
+    "locations": ["AaveBoost.sol:45"],
+    "claim": "The recipient parameter in proxyDeposit lacks a zero-address check. If the underlying pool's deposit function does not reject address(0), the deposit mints pool shares to the zero address, effectively burning the deposited tokens (user funds + REWARD).",
+    "impact": "Deposited user funds and reward aave tokens could be permanently burned if transferred to the zero address, depending on whether the pool validates the recipient.",
+    "paths": [
+      "User or attacker calls proxyDeposit(asset, address(0), amount)",
+      "If pool.deposit does not reject address(0), shares are minted to address(0)",
+      "Tokens are effectively burned with no recovery"
+    ]
+  },
+  {
+    "id": "F-010",
+    "severity": "Informational",
+    "confidence": "low",
+    "title": "uint128 overflow in amount + REWARD expression causes theoretical DoS for reward-path deposits",
+    "locations": ["AaveBoost.sol:50"],
+    "claim": "The expression amount + REWARD on line 50 adds two uint128 values, producing a uint128 result. In Solidity 0.8.4, arithmetic overflow causes a revert. If REWARD is misconfigured near type(uint128).max, any deposit with a non-zero amount would overflow and revert, permanently bricking the reward path.",
+    "impact": "Under normal token scales (uint128 max ≈ 3.4e38) this is purely theoretical. However, a misconfigured REWARD close to the uint128 ceiling would render the reward path permanently unusable.",
+    "paths": [
+      "Owner calls setPool(pool, nearMaxUint128) setting REWARD close to type(uint128).max",
+      "Any user calls proxyDeposit with amount > 0",
+      "Line 50: amount + REWARD overflows uint128 → Solidity 0.8.x panics and reverts",
+      "All reward-path deposits become impossible"
+    ]
+  }
+]
+```
+
+```
+
+
+
+## Output
+Return a JSON object with:
+- `findings`: the COMPLETE updated findings list
+- `rejected_candidates`: candidates rejected from this round, with concise reasons
+
+Each `findings` element must have:
+- `id`
+- `severity`
+- `confidence`
+- `title`
+- `locations`
+- `claim`
+- `impact`
+- `paths`
+- `round`
+- `source_agents`
+
+Preserve existing IDs for surviving findings whenever possible.
+`source_agents` must include every agent that materially supports the final finding.
+
+Each `rejected_candidates` element must have:
+- `title`
+- `source_agents`
+- `reason`
+
+Output ONLY valid JSON. No markdown. No prose.
+
+codex
+I will inspect `AaveBoost.sol` directly, validate each new signal against code behavior, then return a merged findings set with accepted, downgraded, and rejected candidates.
+exec
+/bin/zsh -lc 'ls -la && rg --files && nl -ba AaveBoost.sol' in /Users/lu/Desktop/Red_V1G/replicate_experiment/workspaces/aave_boost/etherscan-contracts/0xd2933c86216dC0c938FfAFEca3C8a2D6e633e2cA/contracts
+ succeeded in 0ms:
+total 8
+drwxr-xr-x@ 4 lu  staff   128 Jan  1 22:43 .
+drwxr-xr-x@ 4 lu  staff   128 Jan  1 22:55 ..
+-rw-r--r--@ 1 lu  staff  1609 Dec 25 00:50 AaveBoost.sol
+drwxr-xr-x@ 3 lu  staff    96 Jan  1 22:43 interfaces
+interfaces/IAavePool.sol
+AaveBoost.sol
+     1	pragma solidity 0.8.4;
+     2	
+     3	import "@openzeppelin/contracts/access/Ownable.sol";
+     4	import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+     5	import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+     6	
+     7	import "./interfaces/IAavePool.sol";
+     8	
+     9	contract AaveBoost is Ownable {
+    10	    using SafeERC20 for IERC20;
+    11	
+    12	    IAavePool public pool;
+    13	    IERC20 public aave;
+    14	
+    15	    uint128 public REWARD;
+    16	
+    17	    constructor(
+    18	        IAavePool aavePool_,
+    19	        IERC20 aave_,
+    20	        uint128 reward_
+    21	    ) {
+    22	        require(address(aavePool_) != address(0), "AAVE_POOL");
+    23	        require(address(aave_) != address(0), "AAVE_TOKEN");
+    24	        pool = aavePool_;
+    25	        aave = aave_;
+    26	        REWARD = reward_;
+    27	        // infinite approval
+    28	        aave.safeIncreaseAllowance(
+    29	            address(pool),
+    30	            0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    31	        );
+    32	    }
+    33	
+    34	    function setPool(IAavePool pool_, uint128 newReward_) external onlyOwner {
+    35	        pool = pool_;
+    36	        REWARD = newReward_;
+    37	        aave.safeIncreaseAllowance(
+    38	            address(pool),
+    39	            0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+    40	        );
+    41	    }
+    42	
+    43	    function proxyDeposit(
+    44	        IERC20 asset,
+    45	        address recipient,
+    46	        uint128 amount
+    47	    ) external {
+    48	        if (aave.balanceOf(address(this)) >= REWARD) {
+    49	            aave.safeTransferFrom(msg.sender, address(this), amount);
+    50	            pool.deposit(asset, recipient, amount + REWARD, false);
+    51	        } else {
+    52	            // fallback to a normal deposit
+    53	            pool.deposit(asset, recipient, amount, false);
+    54	        }
+    55	    }
+    56	}
+
+codex
+I’ve confirmed the core control flow and now I’m checking the pool interface to assess whether candidate impacts depend on external pool behavior.
+exec
+/bin/zsh -lc 'nl -ba interfaces/IAavePool.sol' in /Users/lu/Desktop/Red_V1G/replicate_experiment/workspaces/aave_boost/etherscan-contracts/0xd2933c86216dC0c938FfAFEca3C8a2D6e633e2cA/contracts
+ succeeded in 0ms:
+     1	//SPDX-License-Identifier: Unlicense
+     2	pragma solidity 0.8.4;
+     3	import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+     4	
+     5	interface IAavePool {
+     6	    struct AssetIndex {
+     7	        // tracks the last stkAave aave reward balance
+     8	        uint256 lastStkAaveRewardBalance;
+     9	        // tracks the total Aave reward for stkAave holders
+    10	        uint128 rewardIndex;
+    11	        // bribe reward index;
+    12	        uint128 bribeRewardIndex;
+    13	        // bribe reward last timestamp
+    14	        uint64 bribeLastRewardTimestamp;
+    15	        // bid id
+    16	        uint64 bidId;
+    17	        // tracks the total bid reward
+    18	        // share to be distributed
+    19	        uint128 bidIndex;
+    20	        // tracks the reward per share
+    21	        uint128 bribeRewardPerShare;
+    22	        // tracks the reward per share
+    23	        uint128 stkAaveRewardPerShare;
+    24	    }
+    25	
+    26	    struct BribeReward {
+    27	        uint128 rewardAmountDistributedPerSecond;
+    28	        uint64 startTimestamp;
+    29	        uint64 endTimestamp;
+    30	    }
+    31	
+    32	    struct UserInfo {
+    33	        // stkaave reward index
+    34	        uint128 stkAaveLastRewardPerShare;
+    35	        // bribe reward index
+    36	        uint128 bribeLastRewardPerShare;
+    37	        // reward from the bids in the bribe pool
+    38	        uint128 totalPendingBidReward;
+    39	        // tracks aave reward from the stk aave pool
+    40	        uint128 totalPendingStkAaveReward;
+    41	        // tracks bribe distributed to the user
+    42	        uint128 totalPendingBribeReward;
+    43	        // tracks the last user bid id for aave deposit
+    44	        uint128 aaveLastBidId;
+    45	        // tracks the last user bid id for stkAave deposit
+    46	        uint128 stkAaveLastBidId;
+    47	    }
+    48	
+    49	    /// @dev proposal bid info
+    50	    struct Bid {
+    51	        uint256 totalVotes;
+    52	        uint256 proposalStartBlock;
+    53	        uint128 highestBid;
+    54	        uint64 endTime;
+    55	        bool support;
+    56	        bool voted;
+    57	        address highestBidder;
+    58	    }
+    59	
+    60	    /// @dev emitted on deposit
+    61	    event Deposit(IERC20 indexed token, address indexed user, uint256 amount, uint256 timestamp);
+    62	
+    63	    /// @dev emitted on user reward accrue
+    64	    event AssetReward(IERC20 indexed asset, uint256 totalAmountAccrued, uint256 timestamp);
+    65	
+    66	    /// @dev emitted on user reward accrue
+    67	    event RewardAccrue(
+    68	        address indexed user,
+    69	        uint256 pendingBidReward,
+    70	        uint256 pendingStkAaveReward,
+    71	        uint256 pendingBribeReward,
+    72	        uint256 timestamp
+    73	    );
+    74	
+    75	    event Withdraw(IERC20 indexed token, address indexed user, uint256 amount, uint256 timestamp);
+    76	
+    77	    event RewardClaim(
+    78	        address indexed user,
+    79	        uint256 pendingBid,
+    80	        uint256 pendingReward,
+    81	        uint256 pendingBribeReward,
+    82	        uint256 timestamp
+    83	    );
+    84	
+    85	    event RewardDistributed(uint256 proposalId, uint256 amount);
+    86	
+    87	    event HighestBidIncreased(
+    88	        uint256 indexed proposalId,
+    89	        address indexed prevHighestBidder,
+    90	        address indexed highestBidder,
+    91	        address sender,
+    92	        uint256 highestBid,
+    93	        bool support
+    94	    );
+    95	
+    96	    event BlockProposalId(uint256 indexed proposalId, uint256 timestamp);
+    97	
+    98	    event UnblockProposalId(uint256 indexed proposalId, uint256 timestamp);
+    99	
+   100	    event UpdateDelayPeriod(uint256 delayperiod, uint256 timestamp);
+   101	
+   102	    /// @dev emitted on vote
+   103	    event Vote(uint256 indexed proposalId, address user, bool support, uint256 timestamp);
+   104	
+   105	    /// @dev emitted on Refund
+   106	    event Refund(uint256 indexed proposalId, address bidder, uint256 bidAmount);
+   107	
+   108	    /// @dev emitted on Unclaimed rewards
+   109	    event UnclaimedRewards(address owner, uint256 amount);
+   110	
+   111	    /// @dev emitted on setEndTimestamp
+   112	    event SetBribeRewardEndTimestamp(uint256 oldTimestamp, uint256 endTimestamp);
+   113	
+   114	    /// @dev emitted on setRewardPerSecond
+   115	    event SetBribeRewardPerSecond(uint256 oldRewardPerSecond, uint256 newRewardPerSecond);
+   116	
+   117	    /// @dev emitted on withdrawRemainingReward
+   118	    event WithdrawRemainingReward(uint256 amount);
+   119	
+   120	    /// @dev emmitted on setStartTimestamp
+   121	    event SetBribeRewardStartTimestamp(uint256 oldTimestamp, uint256 endTimestamp);
+   122	
+   123	    /// @dev emitted on setFeeRecipient
+   124	    event UpdateFeeRecipient(address sender, address receipient);
+   125	
+   126	    /// @dev emitted on createProposal
+   127	    event CreatedProposal(uint256 proposalId);
+   128	
+   129	    function deposit(
+   130	        IERC20 asset,
+   131	        address recipient,
+   132	        uint128 amount,
+   133	        bool claim
+   134	    ) external;
+   135	
+   136	    function withdraw(
+   137	        IERC20 asset,
+   138	        address recipient,
+   139	        uint128 amount,
+   140	        bool claim
+   141	    ) external;
+   142	
+   143	    function bid(
+   144	        address bidder,
+   145	        uint256 proposalId,
+   146	        uint128 amount,
+   147	        bool support
+   148	    ) external;
+   149	}
+
+exec
+/bin/zsh -lc "rg -n \"function deposit\\(\" -S .." in /Users/lu/Desktop/Red_V1G/replicate_experiment/workspaces/aave_boost/etherscan-contracts/0xd2933c86216dC0c938FfAFEca3C8a2D6e633e2cA/contracts
+ succeeded in 0ms:
+../contracts/interfaces/IAavePool.sol:129:    function deposit(
+
+web search: 
+web search: 
+web search: 
+web search: OpenZeppelin SafeERC20 safeIncreaseAllowance address(0) revert
+web search: 
+web search: solidity 0.8.4 0xffff... + 0xffff... overflow
+web search: 
+web search: Solidity external function call to EOA no code succeeds
+web search: 
+web search: Aave pool deposit onBehalfOf zero address revert
+web search: 
+web search: openzeppelin SafeERC20 safeTransferFrom amount 0 requires allowance?
+codex
+{
+  "findings": [
+    {
+      "id": "F-001",
+      "severity": "Critical",
+      "confidence": "high",
+      "title": "`proxyDeposit` can be farmed with zero amount to drain reward treasury",
+      "locations": [
+        "AaveBoost.sol:48",
+        "AaveBoost.sol:49",
+        "AaveBoost.sol:50"
+      ],
+      "claim": "The reward branch is gated only by `aave.balanceOf(address(this)) >= REWARD` and does not enforce `amount > 0` or any per-user rate/accounting. Calling `proxyDeposit` with `amount = 0` still reaches `pool.deposit(..., amount + REWARD, ...)`, allowing repeated extraction of `REWARD` from contract-held AAVE.",
+      "impact": "Any account can repeatedly consume the subsidy and redirect deposits to itself, draining the contract's reward inventory and breaking incentive distribution.",
+      "paths": [
+        "Attacker calls `proxyDeposit(aave, attacker, 0)` while contract AAVE balance is at least `REWARD`.",
+        "`aave.safeTransferFrom(msg.sender, address(this), 0)` succeeds with no economic cost.",
+        "`pool.deposit(aave, attacker, REWARD, false)` spends reward inventory.",
+        "Repeat until AAVE balance falls below `REWARD`."
+      ],
+      "round": 1,
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ]
+    },
+    {
+      "id": "F-002",
+      "severity": "High",
+      "confidence": "high",
+      "title": "Historical pools retain unlimited AAVE allowance after `setPool`",
+      "locations": [
+        "AaveBoost.sol:27",
+        "AaveBoost.sol:28",
+        "AaveBoost.sol:34",
+        "AaveBoost.sol:37"
+      ],
+      "claim": "The contract grants `type(uint256).max` allowance to each configured pool via `safeIncreaseAllowance` but never revokes allowance from prior pools when rotating `pool`. Every previously configured pool keeps perpetual transfer rights over this contract’s AAVE.",
+      "impact": "If any previous pool address is compromised/malicious, it can drain all current and future AAVE held by this contract through `transferFrom`.",
+      "paths": [
+        "Deploy with pool P1, giving P1 max allowance on AAVE.",
+        "Owner calls `setPool(P2, ...)`; P2 also receives max allowance.",
+        "P1 allowance remains nonzero forever.",
+        "Compromised P1 transfers AAVE out of AaveBoost via `transferFrom`."
+      ],
+      "round": 1,
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ]
+    },
+    {
+      "id": "F-003",
+      "severity": "High",
+      "confidence": "medium",
+      "title": "`proxyDeposit` does not source the deposited `asset` from user, causing broken deposits and DoS paths",
+      "locations": [
+        "AaveBoost.sol:44",
+        "AaveBoost.sol:49",
+        "AaveBoost.sol:50",
+        "AaveBoost.sol:53"
+      ],
+      "claim": "`proxyDeposit` pulls only `aave` (and only in the reward branch) and never transfers the user-selected `asset` into this contract. For pool implementations where `deposit` pulls `asset` from `msg.sender` (AaveBoost), deposits for non-AAVE assets or unfunded states revert.",
+      "impact": "Proxy deposits can fail systematically (especially for `asset != aave` and after rewards deplete), creating permissionless availability failure for intended user deposits.",
+      "paths": [
+        "User calls `proxyDeposit(asset, recipient, amount)` with `asset != aave`; reward branch still pulls AAVE (or pulls nothing in fallback).",
+        "`pool.deposit(asset, ...)` attempts to source `asset` from AaveBoost, which is typically unfunded/unapproved for that token.",
+        "Call reverts; users cannot complete deposits via this proxy path.",
+        "After contract AAVE drops below `REWARD`, fallback branch often remains non-functional for assets not already funded in AaveBoost."
+      ],
+      "round": 1,
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ]
+    },
+    {
+      "id": "F-004",
+      "severity": "Medium",
+      "confidence": "high",
+      "title": "`setPool` cannot update reward on same pool due max-allowance overflow in `safeIncreaseAllowance`",
+      "locations": [
+        "AaveBoost.sol:34",
+        "AaveBoost.sol:37",
+        "AaveBoost.sol:39"
+      ],
+      "claim": "`setPool` always calls `aave.safeIncreaseAllowance(address(pool), maxUint)`. If current allowance is already max (constructor/previous call), adding max overflows and reverts under Solidity 0.8 checked arithmetic.",
+      "impact": "Owner cannot adjust `REWARD` while keeping the same pool address, reducing ability to operate/tune incentives and potentially blocking maintenance actions.",
+      "paths": [
+        "Pool already has max allowance from constructor or prior `setPool`.",
+        "Owner calls `setPool(existingPool, newReward)`.",
+        "Allowance increment `oldAllowance + maxUint` overflows and transaction reverts."
+      ],
+      "round": 1,
+      "source_agents": [
+        "opencode_1"
+      ]
+    },
+    {
+      "id": "F-005",
+      "severity": "Low",
+      "confidence": "medium",
+      "title": "`setPool` lacks zero/non-contract validation and can brick deposits if misconfigured",
+      "locations": [
+        "AaveBoost.sol:34",
+        "AaveBoost.sol:35",
+        "AaveBoost.sol:50",
+        "AaveBoost.sol:53"
+      ],
+      "claim": "Unlike constructor checks, `setPool` does not validate `pool_ != address(0)` or contract code presence. Misconfiguration to an invalid target can make subsequent `proxyDeposit` calls revert when invoking `pool.deposit`.",
+      "impact": "A mistaken governance/operator action can halt all proxy deposits until corrected, causing service outage.",
+      "paths": [
+        "Owner sets `pool` to zero/non-contract via `setPool`.",
+        "Users call `proxyDeposit`.",
+        "External call to `pool.deposit` fails, reverting deposits globally."
+      ],
+      "round": 1,
+      "source_agents": [
+        "codex_1",
+        "opencode_1"
+      ]
+    },
+    {
+      "id": "F-006",
+      "severity": "High",
+      "confidence": "medium",
+      "title": "Fallback branch can drain remaining AAVE from the contract when rewards are below threshold",
+      "locations": [
+        "AaveBoost.sol:28",
+        "AaveBoost.sol:37",
+        "AaveBoost.sol:53"
+      ],
+      "claim": "When `aave.balanceOf(address(this)) < REWARD`, `proxyDeposit` skips any transfer from caller and still executes `pool.deposit(asset, recipient, amount, false)`. For pool implementations that pull `asset` from `msg.sender`, calling with `asset = aave` lets callers spend AaveBoost-held AAVE into their own recipient position at no cost.",
+      "impact": "Residual AAVE inventory below `REWARD` can be permissionlessly stolen, causing direct protocol treasury loss.",
+      "paths": [
+        "Precondition: `0 < aave.balanceOf(AaveBoost) < REWARD`.",
+        "Attacker calls `proxyDeposit(aave, attackerRecipient, amount)` with `amount` up to contract-held AAVE.",
+        "Fallback branch runs and does not pull tokens from attacker.",
+        "Pool pulls AAVE from AaveBoost (via prior allowance) and credits attacker recipient."
+      ],
+      "round": 2,
+      "source_agents": [
+        "codex_1"
+      ]
+    }
+  ],
+  "rejected_candidates": [
+    {
+      "title": "proxyDeposit reward path transfers aave but deposits arbitrary asset — type confusion causes permanent fund lock when asset != aave",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason": "If `pool.deposit` reverts, the whole transaction reverts and the prior `safeTransferFrom` is rolled back; user AAVE is not permanently locked by this path."
+    },
+    {
+      "title": "No token sweep function — ERC20 tokens sent directly to the contract are permanently locked",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason": "Primarily an operational/design limitation for unsolicited token transfers, not a concrete exploitable protocol vulnerability from this code."
+    },
+    {
+      "title": "setPool does not emit events for pool or REWARD state changes",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason": "Informational observability issue without direct security impact."
+    },
+    {
+      "title": "proxyDeposit allows address(0) recipient — tokens may be burned depending on pool implementation",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason": "Heavily dependent on unknown downstream pool behavior and mostly user-self-inflicted; no concrete protocol-level exploit demonstrated from this contract alone."
+    },
+    {
+      "title": "uint128 overflow in amount + REWARD expression causes theoretical DoS for reward-path deposits",
+      "source_agents": [
+        "opencode_1"
+      ],
+      "reason": "Requires extreme privileged misconfiguration near `type(uint128).max`; treated as unrealistic/theoretical rather than a reportable protocol-risk condition."
+    }
+  ]
+}
+tokens used
+50,650

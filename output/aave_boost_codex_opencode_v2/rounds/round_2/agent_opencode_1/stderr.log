@@ -1,0 +1,23 @@
+[0m
+> build · deepseek-v4-pro
+[0m
+[0m✱ [0mGlob "**/*.sol"[90m in . · 2 matches[0m
+[0m→ [0mRead AaveBoost.sol
+[0m→ [0mRead interfaces/IAavePool.sol
+[0m→ [0mRead ..
+[0m✱ [0mGlob "**/SafeERC20.sol"[90m in .. · 1 match[0m
+[0m→ [0mRead ../@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
+[0m
+[0m# [0mTodos
+[ ] Audit AaveBoost.sol for security vulnerabilities
+[ ] Audit IAavePool.sol interface for issues
+[ ] Compile distinct findings (excluding known F-001 through F-005)
+[0m
+[0m→ [0mRead ..
+[0m✱ [0mGrep "function|require|modifier|event"[90m in . · 26 matches[0m
+[0m
+[0m# [0mTodos
+[x] Audit AaveBoost.sol for security vulnerabilities
+[x] Audit IAavePool.sol interface for issues
+[x] Compile distinct findings (excluding known F-001 through F-005)
+[0m

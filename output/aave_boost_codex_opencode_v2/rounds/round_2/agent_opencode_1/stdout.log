@@ -1,0 +1,77 @@
+After thorough analysis, here are the distinct findings beyond the known F-001 through F-005:
+
+```json
+[
+  {
+    "id": "F-006",
+    "severity": "Medium",
+    "confidence": "medium",
+    "title": "proxyDeposit reward path transfers aave but deposits arbitrary asset — type confusion causes permanent fund lock when asset != aave",
+    "locations": ["AaveBoost.sol:49-50"],
+    "claim": "In the reward branch of proxyDeposit, line 49 transfers amount of the immutable aave token from msg.sender, but line 50 calls pool.deposit with the user-supplied asset parameter. No validation enforces asset == aave. When asset != aave, the user's aave is transferred into AaveBoost but the pool deposit reverts because AaveBoost holds no asset tokens. The contract has no withdrawal function, so the user's aave is permanently locked.",
+    "impact": "Users who call proxyDeposit with an asset that differs from aave will permanently lose the transferred aave tokens with no recovery path. This can happen through front-end bugs, user error, or composability misunderstandings.",
+    "paths": [
+      "User holds aave and has approved AaveBoost for aave spending",
+      "User calls proxyDeposit(USDC, bob, 1000e18) intending a boost but passing wrong asset",
+      "Reward condition aave.balanceOf(address(this)) >= REWARD evaluates true",
+      "Line 49: 1000e18 aave transferred from user to AaveBoost",
+      "Line 50: pool.deposit(USDC, bob, 1000e18 + REWARD, false) called",
+      "Pool attempts safeTransferFrom(USDC, AaveBoost, pool, ...) — reverts (AaveBoost has no USDC)",
+      "User's 1000e18 aave remains permanently trapped in AaveBoost"
+    ]
+  },
+  {
+    "id": "F-007",
+    "severity": "Low",
+    "confidence": "high",
+    "title": "No token sweep function — ERC20 tokens sent directly to the contract are permanently locked",
+    "locations": ["AaveBoost.sol:9-56"],
+    "claim": "The contract only interacts with the aave ERC20 token. There is no sweep, rescue, or withdrawal function for other ERC20 tokens or native ETH sent to the contract address. Any non-aave tokens transferred directly to AaveBoost are irrecoverable.",
+    "impact": "Non-aave ERC20 tokens accidentally or maliciously sent to the contract are permanently locked with no recovery mechanism, resulting in irreversible fund loss.",
+    "paths": [
+      "User or third party transfers USDC/WETH/etc. directly to the AaveBoost contract address",
+      "No function exists to withdraw or sweep these tokens",
+      "Funds are permanently locked in the contract"
+    ]
+  },
+  {
+    "id": "F-008",
+    "severity": "Informational",
+    "confidence": "high",
+    "title": "setPool does not emit events for pool or REWARD state changes",
+    "locations": ["AaveBoost.sol:34-41"],
+    "claim": "The setPool function mutates the pool address and REWARD amount without emitting any events. Off-chain indexers, monitoring systems, and users cannot reliably detect configuration changes on-chain.",
+    "impact": "Reduced transparency and auditability. Users may operate under stale assumptions about the active pool or reward amount. Automated monitoring systems cannot track configuration drift.",
+    "paths": []
+  },
+  {
+    "id": "F-009",
+    "severity": "Low",
+    "confidence": "low",
+    "title": "proxyDeposit allows address(0) recipient — tokens may be burned depending on pool implementation",
+    "locations": ["AaveBoost.sol:45"],
+    "claim": "The recipient parameter in proxyDeposit lacks a zero-address check. If the underlying pool's deposit function does not reject address(0), the deposit mints pool shares to the zero address, effectively burning the deposited tokens (user funds + REWARD).",
+    "impact": "Deposited user funds and reward aave tokens could be permanently burned if transferred to the zero address, depending on whether the pool validates the recipient.",
+    "paths": [
+      "User or attacker calls proxyDeposit(asset, address(0), amount)",
+      "If pool.deposit does not reject address(0), shares are minted to address(0)",
+      "Tokens are effectively burned with no recovery"
+    ]
+  },
+  {
+    "id": "F-010",
+    "severity": "Informational",
+    "confidence": "low",
+    "title": "uint128 overflow in amount + REWARD expression causes theoretical DoS for reward-path deposits",
+    "locations": ["AaveBoost.sol:50"],
+    "claim": "The expression amount + REWARD on line 50 adds two uint128 values, producing a uint128 result. In Solidity 0.8.4, arithmetic overflow causes a revert. If REWARD is misconfigured near type(uint128).max, any deposit with a non-zero amount would overflow and revert, permanently bricking the reward path.",
+    "impact": "Under normal token scales (uint128 max ≈ 3.4e38) this is purely theoretical. However, a misconfigured REWARD close to the uint128 ceiling would render the reward path permanently unusable.",
+    "paths": [
+      "Owner calls setPool(pool, nearMaxUint128) setting REWARD close to type(uint128).max",
+      "Any user calls proxyDeposit with amount > 0",
+      "Line 50: amount + REWARD overflows uint128 → Solidity 0.8.x panics and reverts",
+      "All reward-path deposits become impossible"
+    ]
+  }
+]
+```

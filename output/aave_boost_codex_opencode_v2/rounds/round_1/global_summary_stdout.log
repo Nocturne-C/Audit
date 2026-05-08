@@ -1,0 +1,16 @@
+# Global Audit Memory
+
+## Scope Touched
+- `AaveBoost.sol`: persistent hotspot across rounds; `proxyDeposit` and `setPool` drive most security-relevant behavior and failure modes.
+- `interfaces/IAavePool.sol`: used mainly as ABI/semantic reference; external `pool.deposit` trust boundary remains important but lightly validated.
+
+## Issue Directions Seen
+- Reward extraction paths tied to weak/incorrect deposit accounting (including zero-cost reward accrual scenarios).
+- Allowance lifecycle risk around pool rotation and repeated approval patterns (stale unlimited approvals, repeated-max approval edge behavior).
+- `proxyDeposit` asset-flow correctness issues: funding source assumptions, fallback/revert behavior, and resulting DoS/broken-path outcomes.
+- Pool configuration validation gaps causing misconfiguration-driven risk.
+
+## Useful Context
+- Cross-agent convergence is strong on `AaveBoost.sol` core flows; most durable issues come from shared focus on `proxyDeposit` + `setPool`.
+- Broader speculative/hygiene directions were explored but repeatedly deprioritized versus exploitability-grounded flow/approval/configuration flaws.
+- External pool behavior is a recurring dependency in threat reasoning, but verification depth on that boundary has remained limited.
